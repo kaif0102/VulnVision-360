@@ -1,0 +1,7 @@
+ansible
+python3
+openvas
+gvm-tools
+openscap-scanner
+nmap
+**give ram > 15gb for smooth working of openvas 
