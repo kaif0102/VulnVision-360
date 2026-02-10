@@ -1,0 +1,93 @@
+---
+- name: VulnVision 360 - Ubuntu Remediation Playbook (Kernel + SSH MAC + TCP Timestamps)
+  hosts: ubuntu
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    # -----------------------------
+    # 1) Kernel Mitigation Fix (RFDS + ITS)
+    # -----------------------------
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Upgrade packages
+      apt:
+        upgrade: yes
+
+    - name: Dist upgrade packages
+      apt:
+        upgrade: dist
+
+    - name: Remove unused packages
+      apt:
+        autoremove: yes
+
+    - name: Install latest generic kernel (recommended)
+      apt:
+        name: linux-generic
+        state: present
+        install_recommends: yes
+
+    - name: Get kernel version (before reboot check)
+      command: uname -r
+      register: kernel_version
+
+    - name: Print current kernel version
+      debug:
+        msg: "Current Kernel Version: {{ kernel_version.stdout }}"
+
+    # -----------------------------
+    # 2) Fix Weak MAC Algorithms (SSH)
+    # -----------------------------
+    - name: Ensure strong MAC algorithms configured in sshd_config
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^MACs'
+        line: 'MACs hmac-sha2-512,hmac-sha2-256'
+        state: present
+        create: yes
+
+    - name: Restart SSH service
+      service:
+        name: ssh
+        state: restarted
+
+    # -----------------------------
+    # 3) Fix TCP Timestamps Information Disclosure
+    # -----------------------------
+    - name: Disable TCP timestamps temporarily (runtime)
+      sysctl:
+        name: net.ipv4.tcp_timestamps
+        value: "0"
+        state: present
+        reload: yes
+
+    - name: Make TCP timestamps disable permanent via sysctl config file
+      copy:
+        dest: /etc/sysctl.d/99-disable-tcp-timestamps.conf
+        content: |
+          net.ipv4.tcp_timestamps=0
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply sysctl configuration
+      command: sysctl --system
+
+    - name: Verify TCP timestamps setting
+      command: sysctl net.ipv4.tcp_timestamps
+      register: tcp_timestamp_status
+
+    - name: Print TCP timestamps status
+      debug:
+        msg: "{{ tcp_timestamp_status.stdout }}"
+
+    # -----------------------------
+    # Reboot required for kernel mitigation
+    # -----------------------------
+    - name: Reboot system to apply kernel updates
+      reboot:
+        reboot_timeout: 600

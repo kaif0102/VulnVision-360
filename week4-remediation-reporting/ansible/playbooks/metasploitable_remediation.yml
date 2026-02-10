@@ -1,0 +1,244 @@
+---
+- name: VulnVision 360 - Metasploitable Remediation Playbook
+  hosts: metasploitable
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    # -----------------------------
+    # STEP 1: Stop and remove inetd/xinetd (rexec/rlogin/rsh)
+    # -----------------------------
+    - name: Stop openbsd-inetd service (if exists)
+      service:
+        name: openbsd-inetd
+        state: stopped
+      ignore_errors: yes
+
+    - name: Stop xinetd service (if exists)
+      service:
+        name: xinetd
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove openbsd-inetd and xinetd packages
+      apt:
+        name:
+          - openbsd-inetd
+          - xinetd
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 2: Remove r-services from inetd.conf (extra safety)
+    # -----------------------------
+    - name: Remove rexec/rlogin/rsh/shell lines from inetd.conf if file exists
+      lineinfile:
+        path: /etc/inetd.conf
+        regexp: '^(.*rexec|.*rlogin|.*rsh|.*shell)'
+        state: absent
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 3: Disable Telnet (port 23)
+    # -----------------------------
+    - name: Stop telnetd service
+      service:
+        name: telnetd
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove telnetd package
+      apt:
+        name: telnetd
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 4: Remove Ingreslock backdoor (port 1524)
+    # -----------------------------
+    - name: Kill ingreslock process if running
+      shell: pkill -f ingreslock || true
+      ignore_errors: yes
+
+    - name: Kill shell process if related to ingreslock
+      shell: pkill -f shell || true
+      ignore_errors: yes
+
+    - name: Remove ingreslock binaries if present
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/sbin/ingreslock
+        - /usr/bin/ingreslock
+        - /bin/ingreslock
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 5: Disable FTP (vsftpd) (port 21)
+    # -----------------------------
+    - name: Stop vsftpd service
+      service:
+        name: vsftpd
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove vsftpd package
+      apt:
+        name: vsftpd
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 6: Disable VNC (port 5900)
+    # -----------------------------
+    - name: Kill VNC processes if running
+      shell: pkill -f Xtightvnc || true && pkill -f Xvnc || true
+      ignore_errors: yes
+
+    - name: Remove VNC server packages
+      apt:
+        name:
+          - tightvncserver
+          - vnc4server
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 7: Disable NFS (port 2049)
+    # -----------------------------
+    - name: Stop NFS services
+      service:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - nfs-kernel-server
+        - portmap
+      ignore_errors: yes
+
+    - name: Remove NFS packages
+      apt:
+        name:
+          - nfs-kernel-server
+          - portmap
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 8: Disable Samba (SMB 139/445)
+    # -----------------------------
+    - name: Stop Samba services
+      service:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - smbd
+        - nmbd
+      ignore_errors: yes
+
+    - name: Remove Samba packages
+      apt:
+        name:
+          - samba
+          - samba-common
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 9: Disable MySQL (3306)
+    # -----------------------------
+    - name: Stop mysql service
+      service:
+        name: mysql
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove MySQL packages
+      apt:
+        name:
+          - mysql-server
+          - mysql-client
+          - mysql-common
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 10: Disable PostgreSQL (5432)
+    # -----------------------------
+    - name: Stop postgresql service
+      service:
+        name: postgresql
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove PostgreSQL packages
+      apt:
+        name: postgresql
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 11: Disable Tomcat6 (Ghostcat ports 8009/8180)
+    # -----------------------------
+    - name: Stop tomcat6 service
+      service:
+        name: tomcat6
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove tomcat6 packages
+      apt:
+        name: tomcat6
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 12: Kill Java RMI services (port 1099)
+    # -----------------------------
+    - name: Kill all java processes (RMI/DRb risk reduction)
+      shell: pkill -f java || true
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 13: System upgrade to reduce vulnerabilities
+    # -----------------------------
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Upgrade packages
+      apt:
+        upgrade: yes
+      ignore_errors: yes
+
+    - name: Dist upgrade packages
+      apt:
+        upgrade: dist
+      ignore_errors: yes
+
+    - name: Autoremove unused packages
+      apt:
+        autoremove: yes
+      ignore_errors: yes
+
+    - name: Autoclean package cache
+      command: apt-get autoclean -y
+      ignore_errors: yes
+
+    # -----------------------------
+    # STEP 14: Reboot system
+    # -----------------------------
+    - name: Reboot Metasploitable
+      reboot:
+        reboot_timeout: 600
+      ignore_erro_
